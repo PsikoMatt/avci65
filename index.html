@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Avcı v8.5 - Online İmparatorluk</title>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
+    
+    <style>
+        :root { --bg: #0f172a; --card: #1e293b; --accent: #f59e0b; --red: #ef4444; --blue: #38bdf8; --text: #f1f5f9; --green: #22c55e; }
+        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; display: none; flex-direction: column; align-items: center; overflow-x: hidden; }
+        #top-bar { width: 100%; background: #000; padding: 15px; display: flex; justify-content: center; gap: 30px; border-bottom: 3px solid var(--accent); position: sticky; top:0; z-index: 1000;}
+        .res { font-weight: bold; font-size: 1.1em; }
+        #noti-trigger { position: relative; cursor: pointer; font-size: 1.5em; }
+        #noti-dot { position: absolute; top: -5px; right: -5px; background: var(--red); width: 12px; height: 12px; border-radius: 50%; display: none; border: 2px solid #000; }
+        #noti-panel { position: fixed; right: -320px; top: 70px; width: 300px; height: 550px; background: var(--card); border-left: 3px solid var(--accent); transition: 0.4s; z-index: 999; display: flex; flex-direction: column; box-shadow: -5px 0 15px rgba(0,0,0,0.5); }
+        #noti-panel.open { right: 0; }
+        #noti-header { padding: 10px; background: #000; font-weight: bold; border-bottom: 1px solid #333; display: flex; flex-direction: column; gap: 8px; }
+        #noti-content { flex: 1; overflow-y: auto; padding: 10px; font-size: 0.85em; }
+        .noti-item { padding: 8px; border-bottom: 1px solid #334155; margin-bottom: 5px; }
+        .grid { display: grid; grid-template-columns: repeat(4, 180px); gap: 15px; margin-top: 20px; }
+        .slot { background: var(--card); border: 2px solid #334155; border-radius: 12px; height: 160px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; text-align: center; transition: 0.1s; position: relative; }
+        .slot:hover { border-color: var(--accent); transform: translateY(-2px); }
+        .slot.building, .slot.expedition, .slot.converting { border-color: var(--accent); color: var(--accent); cursor: wait; }
+        #map-container { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; padding: 20px; background: #020617; border-radius: 15px; border: 2px solid var(--accent); margin-top: 20px; }
+        .map-zone { background: #1e293b; border: 1px solid #475569; padding: 10px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; border-radius: 10px; position: relative; }
+        .zone-label { position: absolute; top: -12px; left: 5px; background: var(--accent); color: black; font-size: 0.6em; padding: 1px 4px; border-radius: 3px; font-weight: bold; }
+        .parcel { width: 45px; height: 45px; background: #0f172a; border: 1px dashed #334155; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.7em; color: #475569; transition: 0.3s; cursor: pointer; }
+        .parcel.occupied { background: var(--blue); border: 2px solid var(--accent); color: white; }
+        .parcel.enemy { background: var(--red); border: 2px solid white; color: white; box-shadow: 0 0 10px var(--red); }
+        .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; justify-content: center; align-items: center; z-index: 2000; }
+        .modal { background: var(--card); padding: 25px; border-radius: 15px; border: 2px solid var(--accent); width: 450px; text-align: center; max-height: 90vh; overflow-y: auto; }
+        .stats-box { background: #0f172a; padding: 15px; border-radius: 10px; margin: 15px 0; border: 1px solid #334155; text-align: left; }
+        .stat-line { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.9em; align-items: center; }
+        button { background: var(--accent); border: none; padding: 12px; margin: 5px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 95%; transition: 0.2s; color: #000; }
+        button:hover:not(:disabled) { filter: brightness(1.1); transform: scale(1.01); }
+        button:disabled { background: #475569 !important; opacity: 0.5; cursor: not-allowed; color: #94a3b8; }
+        .btn-cancel { background: var(--red) !important; color: white !important; margin-top: 10px;}
+        input[type=range] { width: 100%; cursor: pointer; accent-color: var(--blue); }
+        input[type=number] { background: #1e293b; color: var(--blue); border: 1px solid var(--blue); border-radius: 5px; padding: 5px; width: 80px; text-align: center; font-size: 1.1em; outline: none; }
+        .timer-val { font-size: 2.2em; font-weight: bold; color: var(--accent); margin: 10px 0; }
+        .hidden { display: none !important; }
+        #cap-container { width: 120px; height: 8px; background: #333; border-radius: 4px; margin-top: 5px; overflow: hidden; }
+        #cap-bar { height: 100%; background: var(--green); width: 0%; transition: 0.3s; }
+    </style>
+</head>
+<body>
+
+    <div id="top-bar">
+        <div class="res" style="color: gold; display:flex; flex-direction:column; align-items:center;">
+            <span>💰 <span id="gold">0</span> / <span id="max-gold">2000</span></span>
+            <div id="cap-container"><div id="cap-bar"></div></div>
+        </div>
+        <div class="res" style="color: var(--blue);">🏹 <span id="h-points">0</span></div>
+        <div class="res" style="color: var(--red);">⚔️ <span id="h-power">0</span></div>
+        <div id="noti-trigger" onclick="toggleNotifications()">🔔 <div id="noti-dot"></div></div>
+    </div>
+
+    <div id="noti-panel">
+        <div id="noti-header">
+            <div style="display:flex; justify-content:space-between; width:100%;">
+                <span id="p-tag">YÜKLENİYOR...</span>
+                <span onclick="resetGame()" style="cursor:pointer; color:var(--red); font-size:0.7em; border:1px solid var(--red); padding:3px;">[SIFIRLA]</span>
+            </div>
+            <button id="admin-reset" onclick="resetDatabase()" class="hidden" style="background:var(--red); color:white; font-size:0.65em; padding:8px; margin-top:8px;">⚠️ DATABASE'İ SIFIRLA (ADMİN)</button>
+        </div>
+        <div id="noti-content"></div>
+    </div>
+
+    <div style="margin-top: 20px;">
+        <button onclick="showView('city')" style="width: 120px;">🏰 Şehir</button>
+        <button onclick="showView('world')" style="width: 120px;">🌍 Harita</button>
+    </div>
+
+    <div id="city-view" class="view-container"><div class="grid" id="city-grid"></div></div>
+    <div id="world-view" class="view-container hidden" style="text-align: center;">
+        <h3 style="margin-top: 20px;">🌍 ONLINE DÜNYA ATLASI</h3>
+        <p style="font-size: 0.8em; color: #94a3b8;">Kırmızı şehirler gerçek oyuncuları temsil eder.</p>
+        <div id="map-container"></div>
+    </div>
+
+    <div id="modal-overlay" class="overlay"><div id="modal-content" class="modal"></div></div>
+
+    <script>
+        // --- GÜVENLİK ---
+        const ACCESS_PASSWORD = "adem65";
+        const inputPass = prompt("Krallık Giriş Şifresi:");
+        if (inputPass !== ACCESS_PASSWORD) {
+            alert("Erişim Reddedildi!");
+            document.body.innerHTML = "<h1 style='color:red; text-align:center; margin-top:100px;'>YETKİSİZ ERİŞİM</h1>";
+        } else {
+            document.body.style.display = "flex";
+        }
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyArv5Fbrvmx377ZbnXmsY4iSy_zSrwOEHk",
+            authDomain: "avci65-5dc76.firebaseapp.com",
+            projectId: "avci65-5dc76",
+            storageBucket: "avci65-5dc76.firebasestorage.app",
+            messagingSenderId: "477611425105",
+            appId: "1:477611425105:web:a2393513604a4f73b2e770",
+            measurementId: "G-MSG4ZHDDFN",
+            databaseURL: "https://avci65-5dc76-default-rtdb.europe-west1.firebasedatabase.app"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let playerName = localStorage.getItem('avci_name') || prompt("Krallık İsminiz (Başkalarıyla aynı isim girmeyin):", "Adem");
+        localStorage.setItem('avci_name', playerName);
+        document.getElementById('p-tag').innerText = "HÜKÜMDAR: " + playerName;
+        if(playerName === "Adem") document.getElementById('admin-reset').classList.remove('hidden');
+
+        const defaultState = {
+            gold: 1000, hPoints: 0, hPower: 0,
+            slots: Array(8).fill(null).map(() => ({ type: 'Boş Slot', level: 0, status: 'empty', timer: 0 })),
+            techs: { mining: 0, hunting: 0, engineering: 0 },
+            activeExpedition: null, activeConversion: null, activeRaid: null,
+            npcCD: { "Vahşi Kurt": 0, "Gezgin Haydut": 0, "Kızgın Ayı": 0, "Kara Ejderha": 0 },
+            cities: [{ zX: Math.floor(Math.random()*5), zY: Math.floor(Math.random()*5), pIdx: Math.floor(Math.random()*4) }]
+        };
+
+        let state = defaultState;
+        let activeSlotIndex = -1;
+        let allPlayers = {};
+        let isLoaded = false;
+
+        const BUILDINGS = {
+            'Altın Madeni': { cost: 50, icon: '⛏️', effect: (l) => (l * 5).toFixed(1), label: "Gelir (Sn)" },
+            'Avcı Ocağı': { cost: 80, icon: '🏹', effect: (l) => "Hassas", label: "Dönüşüm" },
+            'Üniversite': { cost: 150, icon: '📜', effect: (l) => l, label: "Arş. Seviyesi" },
+            'Hazine Odası': { cost: 100, icon: '📦', effect: (l) => l * 5000, label: "Kapasite" },
+            'Gözcü Kulesi': { cost: 70, icon: '🔭', effect: (l) => l, label: "Menzil" },
+            'Pazar Yeri': { cost: 120, icon: '⚖️', label: "Takas" },
+            'Hızlandırıcı': { cost: 200, icon: '⚡', label: "Hız" },
+            'Merkez Köşk': { cost: 300, icon: '🏛️', label: "Şehir Hakkı" }
+        };
+
+        const NPCS = [
+            { name: "Vahşi Kurt", power: 5, reward: 250, icon: '🐺', req: 1 },
+            { name: "Gezgin Haydut", power: 15, reward: 800, icon: '👤', req: 3 },
+            { name: "Kızgın Ayı", power: 40, reward: 2000, icon: '🐻', req: 5 },
+            { name: "Kara Ejderha", power: 100, reward: 10000, icon: '🐉', req: 10 }
+        ];
+
+        function init() { 
+            db.ref('players/' + playerName).once('value', (snap) => {
+                if(snap.exists()) state = snap.val().state || defaultState;
+                else syncCloud();
+                isLoaded = true; renderCity();
+            });
+            setInterval(gameLoop, 1000); 
+            setInterval(syncCloud, 4000); 
+            listenPlayers(); 
+            addLog("Tesisat başarıyla bağlandı. Şantiye hazır!");
+        }
+
+        function syncCloud() { if(isLoaded) db.ref('players/' + playerName).set({ name: playerName, state: state, lastSeen: Date.now() }); }
+        function listenPlayers() { 
+            db.ref('players').on('value', (snap) => { 
+                allPlayers = snap.val() || {}; 
+                if(allPlayers[playerName]?.state) state.hPoints = Math.max(0, allPlayers[playerName].state.hPoints);
+                if(!document.getElementById('world-view').classList.contains('hidden')) renderMap(); 
+            }); 
+        }
+
+        function resetGame() { if(confirm("Hesabını sıfırlamak istiyor musun?")) { db.ref('players/' + playerName).remove(); localStorage.clear(); location.reload(); } }
+        function resetDatabase() { if(confirm("TÜM DÜNYA SIFIRLANACAK! Emin misin?")) { db.ref('players').remove(); addLog("Global Sıfırlama başarılı."); } }
+
+        function renderMap() {
+            const container = document.getElementById('map-container');
+            if(!container) return; container.innerHTML = '';
+            for(let y = 0; y < 5; y++) {
+                for(let x = 0; x < 5; x++) {
+                    const zone = document.createElement('div'); zone.className = 'map-zone';
+                    zone.innerHTML = `<div class="zone-label">${x},${y}</div>`;
+                    for(let p = 0; p < 4; p++) {
+                        const parcel = document.createElement('div'); parcel.className = 'parcel';
+                        const isMine = state.cities.find(c => c.zX === x && c.zY === y && c.pIdx === p);
+                        let enemyData = null;
+                        for(let name in allPlayers) {
+                            if(name === playerName) continue;
+                            if(allPlayers[name].state?.cities?.find(c => c.zX === x && c.zY === y && c.pIdx === p)) { enemyData = allPlayers[name]; break; }
+                        }
+                        if(isMine) { parcel.classList.add('occupied'); parcel.innerHTML = '🏰'; parcel.onclick = () => showView('city'); } 
+                        else if(enemyData) { parcel.classList.add('enemy'); parcel.innerHTML = '🏰'; parcel.onclick = () => showRaidModal(enemyData); } 
+                        else { parcel.innerText = 'BOŞ'; parcel.onclick = () => showMapActions(x, y, p); }
+                        zone.appendChild(parcel);
+                    }
+                    container.appendChild(zone);
+                }
+            }
+        }
+
+        function showRaidModal(enemy) {
+            const modal = document.getElementById('modal-content');
+            if(state.activeRaid) {
+                modal.innerHTML = `<h3>⚔️ ORDULAR YOLDA</h3><div class="stats-box"><div class="timer-val" id="modal-timer">${Math.max(0, state.activeRaid.timer)}s</div></div><button onclick="closeModal()">KAPAT</button>`;
+            } else {
+                modal.innerHTML = `<h3>⚔️ BASKIN: ${enemy.name}</h3>
+                    <div class="stats-box">
+                        <div class="stat-line"><span>Rakip Gücü:</span> <b style="color:var(--red);">${enemy.state.hPower}</b></div>
+                        <div class="stat-line"><span>Senin Gücün:</span> <b style="color:var(--blue);">${state.hPower}</b></div>
+                    </div>
+                    <button onclick="startRaid('${enemy.name}')" style="background:var(--red); color:white;">BASKIN BAŞLAT (5sn)</button>
+                    <button onclick="closeModal()" style="background:#444; color:white; margin-top:10px;">GERİ ÇEKİL</button>`;
+            }
+            document.getElementById('modal-overlay').style.display = 'flex';
+        }
+
+        function startRaid(tName) { state.activeRaid = { timer: 5, target: tName }; addLog(`${tName} krallığına ordu gönderildi!`); showRaidModal(allPlayers[tName]); }
+
+        function executeRaidResult() {
+            const target = allPlayers[state.activeRaid.target];
+            if(target && state.hPower > target.state.hPower) {
+                const stolen = Math.floor(target.state.hPoints * 0.2);
+                state.hPoints += stolen;
+                db.ref('players/' + state.activeRaid.target + '/state/hPoints').set(Math.max(0, target.state.hPoints - stolen));
+                addLog(`Zafer! ${state.activeRaid.target} üzerinden ${stolen} puan çalındı.`);
+            } else { addLog(`Mağlubiyet! Baskın püskürtüldü.`); }
+            state.activeRaid = null; syncCloud();
+        }
+
+        function showMapActions(x, y, p) {
+            const modal = document.getElementById('modal-content');
+            const mKoshk = state.slots.find(s => s.type === 'Merkez Köşk' && s.status === 'complete');
+            const rightsLeft = (mKoshk ? mKoshk.level : 0) - (state.cities.length - 1);
+            let tOptions = `<h4>🚀 Şehri Taşı (50 Altın)</h4><div style="display:flex; flex-direction:column; gap:5px; margin-bottom:10px;">`;
+            state.cities.forEach((city, idx) => { tOptions += `<button onclick="executeTeleport(${idx}, ${x}, ${y}, ${p})" ${state.gold < 50 ? 'disabled' : ''}>${idx === 0 ? "Ana" : "Koloni " + idx} ➡ buraya</button>`; });
+            tOptions += `</div>`;
+            modal.innerHTML = `<h3>🌍 Koordinat: ${x},${y}</h3><div class="stats-box"><div class="stat-line"><span>Ek Şehir Hakkın:</span> <b>${rightsLeft}</b></div></div>${tOptions}<h4>🏗️ Kolonizasyon (100 Altın)</h4><button onclick="executeEstablish(${x}, ${y}, ${p})" ${(state.gold < 100 || rightsLeft <= 0) ? 'disabled' : ''} style="background:var(--green); color:black;">Yeni Şehir Kur</button><button onclick="closeModal()" style="background:#444; color:white; margin-top:10px;">KAPAT</button>`;
+            document.getElementById('modal-overlay').style.display = 'flex';
+        }
+
+        function executeTeleport(idx, x, y, p) { if(state.gold >= 50) { state.gold -= 50; state.cities[idx] = { zX: x, zY: y, pIdx: p }; closeModal(); renderMap(); updateUI(); syncCloud(); } }
+        function executeEstablish(x, y, p) { if(state.gold >= 100) { state.gold -= 100; state.cities.push({ zX: x, zY: y, pIdx: p }); closeModal(); renderMap(); updateUI(); syncCloud(); } }
+
+        // --- V5.6 PDF CORE ---
+        function renderCity() {
+            const container = document.getElementById('city-grid');
+            if(!container) return; container.innerHTML = '';
+            state.slots.forEach((slot, i) => {
+                const div = document.createElement('div'); div.className = `slot ${slot.status}`; div.onclick = () => handleSlot(i);
+                const icon = slot.status === 'empty' ? '+' : (BUILDINGS[slot.type]?.icon || '🏠');
+                if(slot.status === 'building') div.innerHTML = `🏗️<br>${slot.timer}s`;
+                else if(slot.type === 'Avcı Ocağı' && state.activeExpedition) div.innerHTML = `🏹<br>Sefer<br>${state.activeExpedition.timer}s`;
+                else if(slot.type === 'Avcı Ocağı' && state.activeConversion) div.innerHTML = `⚔️<br>Eğitim<br>${state.activeConversion.timer}s`;
+                else div.innerHTML = `<div>${icon}</div><strong>${slot.type}</strong>${slot.level > 0 ? '<br>Svl ' + slot.level : ''}`;
+                container.appendChild(div);
+            });
+        }
+
+        function handleSlot(i) {
+            activeSlotIndex = i; const slot = state.slots[i]; const modal = document.getElementById('modal-content'); modal.innerHTML = '';
+            if(slot.type === 'Gözcü Kulesi' && slot.level > 0 && slot.status !== 'empty') return openWatchtowerUI(slot.level, i);
+            if(slot.status === 'complete' && slot.type === 'Üniversite') return openUniversityUI();
+            const title = document.createElement('h3'); title.innerText = slot.status === 'empty' ? "🏗️ Yeni İnşaat" : `${BUILDINGS[slot.type].icon} ${slot.type} (Svl ${slot.level})`;
+            modal.appendChild(title); const cDiv = document.createElement('div'); modal.appendChild(cDiv);
+            if(slot.status === 'building') { cDiv.innerHTML = `<div class="stats-box"><div class="timer-val" id="modal-timer" style="text-align:center;">${slot.timer}s</div></div><button onclick="closeModal()">GERİ</button>`; } 
+            else if(slot.status === 'empty') { for(let n in BUILDINGS) { if(!state.slots.some(s => s.type === n)) { const b = document.createElement('button'); b.innerHTML = `${BUILDINGS[n].icon} ${n} (${BUILDINGS[n].cost} Altın)`; b.disabled = state.gold < BUILDINGS[n].cost; b.onclick = () => { startBuild(i, n); closeModal(); renderCity(); }; cDiv.appendChild(b); }}} 
+            else { 
+                const upC = slot.level * 150; const b = BUILDINGS[slot.type];
+                cDiv.innerHTML = `<div class="stats-box"><div class="stat-line"><span>Mevcut:</span> <b>${slot.level}</b></div></div><button onclick="upgrade(${i}, ${upC})" ${state.gold < upC ? 'disabled' : ''}>Yükselt (${upC} Altın)</button>`; 
+                if(slot.type === 'Avcı Ocağı') renderHunterUI(cDiv, slot, i); 
+                const db = document.createElement('button'); db.innerText = "Yık"; db.style.background = "var(--red)"; db.style.color="white"; db.onclick = () => { demolish(i); closeModal(); renderCity(); }; cDiv.appendChild(db); 
+            }
+            addCloseButton(modal); document.getElementById('modal-overlay').style.display = 'flex';
+        }
+
+        function renderHunterUI(cDiv, slot, i) {
+            if(state.activeExpedition) { cDiv.innerHTML += `<div class="stats-box"><div class="timer-val" id="modal-timer" style="text-align:center;">${state.activeExpedition.timer}s</div></div>`; const b = document.createElement('button'); b.className = 'btn-cancel'; b.innerText = "İptal Et"; b.onclick = () => cancelExpedition(); cDiv.appendChild(b); } 
+            else if(state.activeConversion) { cDiv.innerHTML += `<div class="stats-box"><div class="timer-val" id="modal-timer" style="text-align:center;">${state.activeConversion.timer}s</div></div>`; } 
+            else { 
+                [{t:5,p:250,r:1},{t:10,p:600,r:3},{t:15,p:1000,r:5}].forEach(ex => { const b = document.createElement('button'); b.innerHTML = `${ex.t}s Sefer (${ex.p} Puan)${slot.level < ex.r ? `<br><small>${ex.r}. Svl Gerekl</small>` : ''}`; b.disabled = slot.level < ex.r; b.onclick = () => { startExpedition(ex.t, ex.p); handleSlot(i); renderCity(); }; cDiv.appendChild(b); });
+                const sWrap = document.createElement('div'); sWrap.className = 'slider-container'; sWrap.innerHTML = `<div class="input-group"><span>Puan:</span><input type="number" id="pts-in" min="0" max="${state.hPoints}" value="0"></div><input type="range" id="pts-range" min="0" max="${state.hPoints}" value="0">`; cDiv.appendChild(sWrap); const inN = sWrap.querySelector('#pts-in'); const inR = sWrap.querySelector('#pts-range'); inN.oninput = (e) => { let v = Math.max(0, parseInt(e.target.value)||0); if(v>state.hPoints) v=Math.floor(state.hPoints); inN.value=v; inR.value=v; }; inR.oninput = (e) => inN.value = e.target.value; const cb = document.createElement('button'); cb.innerText = "Puanı Güce Aktar (2sn)"; cb.onclick = () => { if(parseInt(inN.value) <= state.hPoints) startConversion(parseInt(inN.value)); handleSlot(i); renderCity(); }; cDiv.appendChild(cb); 
+            }
+        }
+
+        function gameLoop() {
+            if(!isLoaded) return;
+            let base = 0; let cap = 2000; let forceGrid = false;
+            state.slots.forEach((s, idx) => { if(s.type === 'Altın Madeni' && s.status === 'complete') base += s.level * 5; if(s.type === 'Hazine Odası' && s.status === 'complete') cap = s.level * 5000; if(s.status === 'building') { s.timer--; forceGrid = true; if(activeSlotIndex === idx && document.getElementById('modal-timer')) document.getElementById('modal-timer').innerText = s.timer + "s"; if(s.timer <= 0) { s.status = 'complete'; s.level++; addLog(s.type + " bitti."); if(activeSlotIndex === idx) handleSlot(idx); } } });
+            if(state.activeExpedition) { state.activeExpedition.timer--; forceGrid = true; if(activeSlotIndex !== -1 && document.getElementById('modal-timer')) document.getElementById('modal-timer').innerText = state.activeExpedition.timer + "s"; if(state.activeExpedition.timer <= 0) { state.hPoints += state.activeExpedition.reward; addLog("Sefer bitti!"); state.activeExpedition = null; if(activeSlotIndex !== -1) handleSlot(activeSlotIndex); } }
+            if(state.activeConversion) { state.activeConversion.timer--; forceGrid = true; if(activeSlotIndex !== -1 && document.getElementById('modal-timer')) document.getElementById('modal-timer').innerText = state.activeConversion.timer + "s"; if(state.activeConversion.timer <= 0) { state.hPower += state.activeConversion.pts; addLog("Eğitim bitti!"); state.activeConversion = null; if(activeSlotIndex !== -1) handleSlot(activeSlotIndex); } }
+            if(state.activeRaid) { state.activeRaid.timer--; if(document.getElementById('modal-timer')) document.getElementById('modal-timer').innerText = Math.max(0, state.activeRaid.timer) + "s"; if(state.activeRaid.timer <= 0) executeRaidResult(); }
+            let inc = base * (1 + (state.techs.mining * 0.1)); if(state.gold < cap) state.gold = Math.min(cap, state.gold + inc);
+            updateUI(); if(forceGrid) renderCity(); updateModalButtons();
+        }
+
+        function upgrade(i, c) { state.gold -= c; state.slots[i].status = 'building'; state.slots[i].timer = 5; handleSlot(i); renderCity(); }
+        function startBuild(i, n) { state.gold -= BUILDINGS[n].cost; state.slots[i] = { type: n, level: 0, status: 'building', timer: 5 }; }
+        function demolish(i) { state.slots[i] = { type: 'Boş Slot', level: 0, status: 'empty', timer: 0 }; }
+        function openUniversityUI() { const modal = document.getElementById('modal-content'); modal.innerHTML = `<h3>📜 Teknik Laboratuvar</h3><div class="stats-box"><div class="stat-line">💰 Maden: <span>+%${state.techs.mining * 10}</span><button onclick="research('mining')">Geliştir</button></div><div class="stat-line">🏹 Taktik: <span>+%${state.techs.hunting * 20}</span><button onclick="research('hunting')">Geliştir</button></div><div class="stat-line">🏗️ Lojistik: <span>-%${state.techs.engineering * 5}</span><button onclick="research('engineering')">Geliştir</button></div></div>`; addCloseButton(modal); document.getElementById('modal-overlay').style.display = 'flex'; }
+        function openWatchtowerUI(lvl, idx) { activeSlotIndex = idx; const modal = document.getElementById('modal-content'); modal.innerHTML = `<h3>🔭 Gözcü Kulesi (Svl ${lvl})</h3><div id="wt-c"></div>`; NPCS.forEach(npc => { const box = document.createElement('div'); box.className = 'stats-box'; const lock = lvl < npc.req; const cd = state.npcCD[npc.name] || 0; box.innerHTML = `<div class="stat-line"><strong>${npc.icon} ${npc.name}</strong><span>Güç: ${npc.power}</span></div>`; const btn = document.createElement('button'); btn.setAttribute('data-npc', npc.name); if(lock) { btn.innerHTML = `KİLİTLİ`; btn.disabled = true; } else if(cd > 0) { btn.innerHTML = `Bekleniyor (${cd}s)`; btn.disabled = true; } else { btn.innerText = `SALDIR (+${npc.reward} Puan)`; btn.onclick = () => { attackNPC(npc); openWatchtowerUI(lvl, idx); }; } box.appendChild(btn); modal.querySelector('#wt-c').appendChild(box); }); const upC = lvl * 150; const ub = document.createElement('button'); ub.innerHTML = `Yükselt (${upC} Altın)`; ub.disabled = state.gold < upC; ub.onclick = () => { upgrade(idx, upC); closeModal(); renderCity(); }; modal.appendChild(ub); addCloseButton(modal); document.getElementById('modal-overlay').style.display = 'flex'; }
+        function research(type) { let cost = (state.techs[type] + 1) * 200; if(state.gold >= cost) { state.gold -= cost; state.techs[type]++; addLog("Araştırma bitti."); openUniversityUI(); } }
+        function attackNPC(npc) { if(state.hPower >= npc.power) { state.hPoints += npc.reward; state.npcCD[npc.name] = 10; addLog("Zafer: " + npc.name); } else { addLog("Yetersiz güç!"); } }
+        function addCloseButton(m) { const b = document.createElement('button'); b.innerText = "Kapat"; b.style.background = "#444"; b.style.color="white"; b.onclick = closeModal; m.appendChild(b); }
+        function closeModal() { document.getElementById('modal-overlay').style.display = 'none'; activeSlotIndex = -1; }
+        function startExpedition(s, p) { state.activeExpedition = { timer: s, reward: p }; addLog("Sefere çıkıldı."); }
+        function cancelExpedition() { state.activeExpedition = null; addLog("İptal edildi."); renderCity(); if(activeSlotIndex !== -1) handleSlot(activeSlotIndex); }
+        function startConversion(v) { if(v > 0) { state.activeConversion = { timer: 2, pts: v }; state.hPoints -= v; addLog("Eğitim başladı."); } }
+        function updateUI() { document.getElementById('gold').innerText = Math.floor(state.gold); document.getElementById('h-points').innerText = Math.floor(state.hPoints); document.getElementById('h-power').innerText = Math.floor(state.hPower); document.getElementById('max-gold').innerText = Math.floor(BUILDINGS['Hazine Odası'] ? (state.slots.find(s=>s.type==='Hazine Odası')?.level * 5000 || 2000) : 2000); document.getElementById('cap-bar').style.width = (state.gold / parseInt(document.getElementById('max-gold').innerText) * 100) + "%"; }
+        function showView(v) { document.getElementById('city-view').classList.toggle('hidden', v !== 'city'); document.getElementById('world-view').classList.toggle('hidden', v !== 'world'); if(v==='world') renderMap(); }
+        function updateModalButtons() { const o = document.getElementById('modal-overlay'); if(o.style.display === 'flex') { const b = o.querySelectorAll('button[data-cost]'); b.forEach(btn => btn.disabled = state.gold < parseInt(btn.getAttribute('data-cost'))); } }
+        function addLog(msg) { const c = document.getElementById('noti-content'); if(!c) return; const i = document.createElement('div'); i.className = 'noti-item'; i.innerHTML = `<small>[${new Date().toLocaleTimeString()}]</small> ${msg}`; c.prepend(i); document.getElementById('noti-dot').style.display = 'block'; }
+        function toggleNotifications() { document.getElementById('noti-panel').classList.toggle('open'); document.getElementById('noti-dot').style.display = 'none'; }
+        init();
+    </script>
+</body>
+</html>
